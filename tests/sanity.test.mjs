@@ -9,7 +9,7 @@ import { computeRewards, pointsFor, POINTS_BASE, POINTS_ON_TIME_BONUS } from "..
 import { planMerge, validateSnapshot, backupFilename, BACKUP_FORMAT, BACKUP_SCHEMA } from "../js/services/backup-service.js";
 import { renderMarkdown } from "../js/ui/manual-view.js";
 import { hashSecret, randomSaltHex, generateRecoveryCode, normalizeRecoveryCode, constantEqual } from "../js/services/lock-service.js";
-import { SB_CATEGORIES, getLifeStats, FAMILY_ARCHIVE_ALBUM_NAME, SUGGESTED_ARCHIVES, ARCHIVE_NAME_PATTERN, hasSeenCognitiveLinkingIntro, markCognitiveLinkingIntroSeen, shouldAutoShowCognitiveLinkingIntro } from "../js/services/mnemosyne-service.js";
+import { SB_CATEGORIES, getLifeStats } from "../js/services/mnemosyne-service.js";
 import { buildContext, getSuggestedPrompts, clearHistory, getHistory } from "../js/ai/ai-service.js";
 import { MemoryType as MT2, ImportanceLevel, createMemoryCard, createMediaRef, MediaType } from "../js/data/models.js";
 
@@ -287,20 +287,6 @@ test("Mnemosyne modules import cleanly", async () => {
   await import("../js/services/mnemosyne-service.js");
   await import("../js/ui/second-brain-view.js");
   await import("../js/ui/memory-card-capture.js");
-  await import("../js/ui/cognitive-linking-onboarding.js");
-});
-test("Cognitive Linking: onboarding-state API is exposed", () => {
-  assert(typeof hasSeenCognitiveLinkingIntro === "function", "hasSeenCognitiveLinkingIntro exported");
-  assert(typeof markCognitiveLinkingIntroSeen === "function", "markCognitiveLinkingIntroSeen exported");
-  assert(typeof shouldAutoShowCognitiveLinkingIntro === "function", "shouldAutoShowCognitiveLinkingIntro exported");
-});
-test("Cognitive Linking: suggested archives are universal, not family-only", () => {
-  assert(FAMILY_ARCHIVE_ALBUM_NAME === "MemoryOS - Family Archive", "family example kept");
-  assert(/<Topic>/.test(ARCHIVE_NAME_PATTERN), "naming pattern exposes a topic slot");
-  const topics = SUGGESTED_ARCHIVES.map(a => a.topic);
-  assert(topics.includes("Family"), "family is offered");
-  assert(topics.includes("Travel") && topics.includes("Learning") && topics.includes("Work"), "non-family archives offered");
-  assert(SUGGESTED_ARCHIVES.every(a => a.name.startsWith("MemoryOS - ")), "all follow the convention");
 });
 
 // --- AI service ---

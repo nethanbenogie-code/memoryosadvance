@@ -26,10 +26,19 @@ import { dayKey, dayBounds } from "../services/journal-service.js";
 import * as semantic from "../services/semantic-service.js";
 
 const ANTHROPIC_MODEL = "claude-sonnet-4-6";
-const WEBLLM_MODEL = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
+
+/** Selectable in-browser models. q4f16 needs shader-f16 (most modern GPUs). */
+export const WEBLLM_MODELS = [
+  { id: "Llama-3.2-1B-Instruct-q4f16_1-MLC", label: "Fast & light — 1B (older / low-RAM devices, ~0.9GB)" },
+  { id: "Llama-3.2-3B-Instruct-q4f16_1-MLC", label: "Balanced — 3B (8GB+ RAM, recommended, ~1.8GB)" },
+];
+const DEFAULT_WEBLLM_MODEL = WEBLLM_MODELS[0].id;
+const DEFAULT_OLLAMA_MODEL = "llama3.2";
+
 const MAX_TOKENS = 1024;
 const MAX_CONTEXT_MEMORIES = 40;
 const API_URL = "https://api.anthropic.com/v1/messages";
+const OLLAMA_URL = "http://localhost:11434/api/chat";
 
 /* ─────────────────────────── API key management ──────────────────────── */
 
@@ -58,10 +67,27 @@ export async function setProvider(provider) {
   await repo.setMeta("ai_provider", provider);
 }
 
+/** Selected in-browser model id (defaults to the light 1B). */
+export async function getWebllmModel() {
+  return (await repo.getMeta("ai_webllm_model")) || DEFAULT_WEBLLM_MODEL;
+}
+export async function setWebllmModel(id) {
+  await repo.setMeta("ai_webllm_model", id);
+}
+
+/** Ollama model name, e.g. "llama3.2", "qwen2.5:3b". */
+export async function getOllamaModel() {
+  return (await repo.getMeta("ai_ollama_model")) || DEFAULT_OLLAMA_MODEL;
+}
+export async function setOllamaModel(name) {
+  await repo.setMeta("ai_ollama_model", name || DEFAULT_OLLAMA_MODEL);
+}
+
 /** Ready to chat with the current provider? Anthropic needs a key;
  *  WebLLM needs nothing. The view uses this to decide what to show. */
 export async function isReady() {
-  if ((await getProvider()) === "webllm") return true;
+  const provider = await getProvider();
+  if (provider === "webllm" || provider === "ollama") return true;
   return !!(await getApiKey());
 }
 
@@ -75,13 +101,14 @@ let _webllmModel = null;
 
 async function ensureWebLLM(onStatus) {
   if (!navigator.gpu) throw new Error("NO_WEBGPU");
-  if (_webllmEngine && _webllmModel === WEBLLM_MODEL) return _webllmEngine;
+  const modelId = await getWebllmModel();
+  if (_webllmEngine && _webllmModel === modelId) return _webllmEngine;
   const webllm = await import("https://esm.run/@mlc-ai/web-llm@0.2.83");
-  _webllmEngine = await webllm.CreateMLCEngine(WEBLLM_MODEL, {
+  _webllmEngine = await webllm.CreateMLCEngine(modelId, {
     initProgressCallback: (p) =>
       onStatus?.(p.text || `Loading model ${Math.round((p.progress || 0) * 100)}%`),
   });
-  _webllmModel = WEBLLM_MODEL;
+  _webllmModel = modelId;
   return _webllmEngine;
 }
 
@@ -231,6 +258,15 @@ export async function buildContext() {
 function buildSystemPrompt(context) {
   return `You are the MemoryOS AI assistant — a personal reasoning engine that helps the user understand, reflect on, and act on their own life data. You are NOT a general-purpose chatbot. You reason specifically over the user's memories, journal entries, tasks, and personal records provided below.
 
+ABOUT THIS DATA — READ CAREFULLY:
+Everything in the context below belongs to the user you are talking to. It is their OWN private second brain, stored only on their own device. You are speaking directly to its owner. Therefore:
+- NEVER refuse to share this information with them, and never describe it as a "private citizen's" data or a privacy concern. It is the user's own information. Withholding it from them makes no sense.
+- When they ask for their journal, tasks, notes, phone numbers, or anything else in the context, surface it directly and plainly. That is your core job.
+- If something they ask for is genuinely not in the context, say so briefly and honestly — don't refuse on "privacy" grounds, just say it isn't in their data.
+
+YOU ARE READ-ONLY:
+You can read and reason over the user's data, but you cannot create, edit, or delete it. If they ask you to save, add, remember, or change something ("save my number", "add a task", "remember this"), explain briefly that you can't write to their memory, and tell them to use Quick Capture — the + button, or Ctrl+K (⌘K on Mac). Don't pretend you saved it.
+
 Your personality:
 - Calm, thoughtful, and personal — like a trusted advisor who knows the user's life
 - Concrete: reference specific memories, dates, tasks, and people by name when relevant
@@ -244,13 +280,14 @@ Your capabilities:
 - Help reflect: "What mattered most this week?", "What did I learn?"
 - Suggest what to focus on next based on their tasks and journal
 
-What you must never do:
-- Invent memories or tasks that aren't in the context
-- Give generic life advice unrelated to the user's actual data
-- Pretend to know things outside the context window
-- Be verbose — keep responses focused and scannable
+Scope:
+- Your purpose is the user's own memories. You may answer a simple general question, but you are not a calculator or a search engine — for heavy arithmetic or current external facts, say briefly that it's outside what you do, rather than guessing.
 
-If the user asks about something not in their data, say so honestly and briefly.
+What you must never do:
+- Invent memories, tasks, or facts that aren't in the context
+- Refuse the user access to their own data
+- Pretend to know things outside the context window, or pretend to have saved something
+- Be verbose — keep responses focused and scannable
 
 ---
 
@@ -304,6 +341,8 @@ export async function chat(userMessage, onStatus) {
     assistantMessage =
       provider === "webllm"
         ? await chatWebLLM(systemPrompt, messages, onStatus)
+        : provider === "ollama"
+        ? await chatOllama(systemPrompt, messages, onStatus)
         : await chatAnthropic(systemPrompt, messages);
   } catch (err) {
     conversationHistory.pop(); // drop the failed user turn
@@ -357,6 +396,34 @@ async function chatWebLLM(systemPrompt, messages, onStatus) {
     max_tokens: MAX_TOKENS,
   });
   return reply.choices[0].message.content.trim();
+}
+
+/** Local path: a model served by Ollama on this machine. Uses the device's
+ *  GPU natively (faster than in-browser) and allows larger models, while
+ *  staying fully local and key-free. Requires Ollama running with
+ *  OLLAMA_ORIGINS set so the browser may reach it. */
+async function chatOllama(systemPrompt, messages, onStatus) {
+  onStatus?.("Thinking…");
+  const model = await getOllamaModel();
+  let res;
+  try {
+    res = await fetch(OLLAMA_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        stream: false,
+        messages: [{ role: "system", content: systemPrompt }, ...messages],
+      }),
+    });
+  } catch {
+    throw new Error("OLLAMA_DOWN"); // not running / unreachable / CORS
+  }
+  if (!res.ok) {
+    if (res.status === 404) throw new Error("OLLAMA_MODEL"); // model not pulled
+    throw new Error("OLLAMA_DOWN");
+  }
+  return (await res.json()).message.content.trim();
 }
 
 /* ─────────────────────── suggested prompts ──────────────────────────── */

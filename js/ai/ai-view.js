@@ -56,12 +56,28 @@ export class AIView {
       await this.renderChat();
     });
 
-    const offlineBtn = el("button.btn.btn-quiet", {
-      type: "button",
-      style: "margin-top:16px;",
-    }, "Run fully offline instead — no key");
-    offlineBtn.addEventListener("click", async () => {
+    // In-browser (WebLLM) — model selectable for the device's capability
+    const modelSelect = el("select.lock-input", {
+      "aria-label": "Offline model", style: "text-align:left;",
+    }, ...ai.WEBLLM_MODELS.map((m) => el("option", { value: m.id }, m.label)));
+    modelSelect.value = ai.WEBLLM_MODELS[ai.WEBLLM_MODELS.length - 1].id; // recommend the larger one
+    const browserBtn = el("button.btn.btn-quiet", { type: "button" }, "Run in this browser");
+    browserBtn.addEventListener("click", async () => {
+      await ai.setWebllmModel(modelSelect.value);
       await ai.setProvider("webllm");
+      await this.renderChat();
+    });
+
+    // Local Ollama — native GPU, larger models, still local & key-free
+    const ollamaInput = el("input.lock-input", {
+      type: "text", value: "llama3.2", autocomplete: "off", spellcheck: "false",
+      "aria-label": "Ollama model name",
+      style: "text-align:left;font-family:monospace;font-size:13px;",
+    });
+    const ollamaBtn = el("button.btn.btn-quiet", { type: "button" }, "Use local Ollama");
+    ollamaBtn.addEventListener("click", async () => {
+      await ai.setOllamaModel(ollamaInput.value.trim());
+      await ai.setProvider("ollama");
       await this.renderChat();
     });
 
@@ -86,9 +102,19 @@ export class AIView {
         keyInput,
         error,
         saveBtn,
-        el("p.ai-privacy", {}, "🔒 Your API key and your memories never leave your device except to call the Anthropic API directly."),
-        offlineBtn,
-        el("p.ai-privacy", {}, "Offline mode runs a small AI model inside your browser via WebGPU — no key, no server, and no internet after the first load (~900MB, cached). Needs Chrome or Edge.")
+        el("p.ai-privacy", {}, "🔒 With a key, only the memories relevant to a question are sent — to Anthropic alone."),
+
+        el("p", { style: "text-align:center;color:var(--ink-soft);margin:18px 0 4px;font-size:13px;" }, "— or run locally, no key —"),
+
+        el("label.mc-label", {}, "Offline, in this browser (WebGPU)"),
+        modelSelect,
+        browserBtn,
+        el("p.ai-privacy", {}, "Runs a small model inside your browser — no key, no server, works offline after the first download (1B ~0.9GB, 3B ~1.8GB, cached). Needs Chrome or Edge. Nothing leaves your device."),
+
+        el("label.mc-label", { style: "margin-top:14px;" }, "Local Ollama (advanced — best speed)"),
+        ollamaInput,
+        ollamaBtn,
+        el("p.ai-privacy", {}, "If you run Ollama on this machine it uses your GPU natively and runs larger, faster models. Start it with OLLAMA_ORIGINS=\"*\" so the browser can reach it, and pull the model first (e.g. ollama pull llama3.2). Still fully local and key-free.")
       )
     );
     keyInput.focus();
@@ -115,7 +141,7 @@ export class AIView {
       this.renderChat();
     }}, "Clear chat");
 
-    const settingsBtn = provider === "webllm"
+    const settingsBtn = provider !== "anthropic"
       ? el("button.btn.btn-quiet", { type: "button", onclick: () => {
           ai.clearHistory();
           this.renderSetup();
@@ -170,6 +196,10 @@ export class AIView {
         }
         if (err.message === "NO_WEBGPU") {
           messagesEl.append(this._bubble("error", "Offline AI needs WebGPU — use Chrome or Edge, or switch to an API key from AI settings."));
+        } else if (err.message === "OLLAMA_DOWN") {
+          messagesEl.append(this._bubble("error", "Can't reach Ollama. Make sure it's running, started with OLLAMA_ORIGINS=\"*\" so the browser can connect."));
+        } else if (err.message === "OLLAMA_MODEL") {
+          messagesEl.append(this._bubble("error", "That Ollama model isn't installed yet. Pull it first — e.g. run: ollama pull llama3.2 — then try again."));
         } else if (err.message === "INVALID_KEY") {
           messagesEl.append(this._bubble("error", "Your API key was rejected. Please reconnect with a valid key."));
         } else if (err.message === "RATE_LIMITED") {

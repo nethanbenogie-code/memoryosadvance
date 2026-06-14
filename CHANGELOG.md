@@ -5,51 +5,32 @@ All notable changes to MemoryOS are recorded here. The format follows
 `CACHE_VERSION` in `sw.js` as its release version — bumping it is how an
 update reaches users offline.
 
-## [0.3.8] — 2026-06-14
-
-### Changed
-- **Generalized the onboarding from "Family Archive" to "Cognitive Linking"** —
-  the actual primitive of MemoryOS. The intro now teaches the universal idea
-  (store the *meaning* and an invisible *pointer*; the media stays where it
-  lives), with Family as the most relatable example among several suggested
-  archives (Travel, Learning, Work, Friends). Each example archive name is
-  tap-to-copy, following the convention `MemoryOS - <Topic> Archive`.
-- The intro is now **strictly show-once**: it is marked seen the moment it
-  appears on first launch, so it never returns on its own (it can still be
-  reopened from the **How Cognitive Linking works** link).
-- Renamed `ui/family-archive-onboarding.js` → `ui/cognitive-linking-onboarding.js`
-  and its exports (`maybeShowCognitiveLinkingOnboarding`,
-  `openCognitiveLinkingExplainer`); service helpers renamed to match
-  (`…CognitiveLinkingIntro`). The persisted "seen" flag keeps its legacy key,
-  so anyone who already dismissed the intro is not shown it again.
-- `CACHE_VERSION` → `memoryos-v0.3.8`.
-- User Manual: section 1 and section 4 reworded around Cognitive Linking as the
-  universal concept, with Family as one example.
-
-## [0.3.7] — 2026-06-14
+## [0.3.8] — 2026-06-13
 
 ### Added
-- **Family Archive onboarding** (`ui/family-archive-onboarding.js`): a calm,
-  dismissable explainer that introduces the core habit — keep your photos in
-  one private album (`MemoryOS - Family Archive`) wherever they already live,
-  and create a matching Memory Card here. It auto-opens on the **first launch**
-  of the app (and on relaunch until dismissed), and can be reopened any time
-  from a **How the Family Archive works** link in the Second Brain header and
-  empty state. A user who was already using MemoryOS before this release is
-  detected on first boot and never interrupted. Includes a one-tap copy of the
-  album name and an explicit privacy note. State lives in two `meta` flags via
-  the Mnemosyne service (`familyArchiveIntroSeenAt`, `firstLaunchAt`) — no
-  schema change, no DB-layer access from the UI.
+- Offline model is now **selectable** — a light 1B (low-RAM devices) or a
+  3B (8GB+ RAM, recommended) — chosen on the AI setup screen.
+- **Local Ollama** provider: point MemoryOS at Ollama running on the same
+  machine to use larger, faster models on the GPU natively, still fully
+  local and key-free. Clear errors when Ollama isn't running or the model
+  isn't pulled.
 
 ### Changed
-- `CACHE_VERSION` → `memoryos-v0.3.7`; the new module is precached in the app
-  shell so it works offline on first install.
-- User Manual: documents the first-launch welcome (section 1) and how to
-  reopen the Family Archive guide (section 4).
+- AI setup screen reorganized into three clear options: Anthropic key,
+  in-browser (WebLLM, with model picker), and local Ollama.
+- Manual section 8 updated for the model picker and Ollama.
+
+## [0.3.7] — 2026-06-13
 
 ### Fixed
-- Removed a duplicated block of entries in `typeLabel()` (`data/models.js`).
-- Deleted a stray `{css,js,...}` directory left by an un-expanded `mkdir`.
+- AI assistant no longer refuses the user's own data. The system prompt now
+  states plainly that all context belongs to the user being spoken to — their
+  own private second brain — so it surfaces journals, tasks, and notes on
+  request instead of citing "privacy".
+- The assistant now knows it is read-only: asked to save or change something,
+  it points the user to Quick Capture instead of pretending to have saved it.
+- Scope clarified: it defers heavy arithmetic / external lookups rather than
+  guessing, keeping focus on the user's memories.
 
 ## [0.3.6] — 2026-06-13
 

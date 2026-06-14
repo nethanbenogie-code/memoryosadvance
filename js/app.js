@@ -26,7 +26,6 @@ import { ManualView } from "./ui/manual-view.js";
 import { SecondBrainView } from "./ui/second-brain-view.js";
 import { AIView } from "./ai/ai-view.js";
 import { initMemoryCardCapture } from "./ui/memory-card-capture.js";
-import { maybeShowCognitiveLinkingOnboarding } from "./ui/cognitive-linking-onboarding.js";
 import { isLockEnabled, lockNow } from "./services/lock-service.js";
 import { showLockScreen } from "./ui/lock-screen.js";
 import { initCelebrations } from "./ui/celebration.js";
@@ -107,11 +106,6 @@ async function main() {
 
   await showView("brain", host);
   registerServiceWorker();
-
-  // First-run only: introduce Cognitive Linking (the Family Archive is its
-  // most relatable example). Non-blocking and self-gating — shows exactly
-  // once, and never for a user who was already using MemoryOS.
-  maybeShowCognitiveLinkingOnboarding();
 
   // After a restore, rebuild the search index and re-render the open view.
   bus.on("backup:restored", async () => {

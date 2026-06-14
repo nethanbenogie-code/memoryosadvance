@@ -42,7 +42,6 @@ const APP_SHELL = [
   "./js/ui/lock-screen.js",
   "./js/ui/second-brain-view.js",
   "./js/ui/memory-card-capture.js",
-  "./js/ui/cognitive-linking-onboarding.js",
   "./docs/USER-MANUAL.md",
   "./js/ui/capture.js",
   "./js/ui/timeline-view.js",

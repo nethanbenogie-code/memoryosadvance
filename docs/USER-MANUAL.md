@@ -12,10 +12,6 @@ This manual covers everything you need. It takes about fifteen minutes to read i
 
 MemoryOS runs in your web browser. Open the app's web address on any phone, tablet, or computer — Chrome, Edge, Safari, and Firefox all work.
 
-### The first time you open it
-
-On a brand-new install, MemoryOS greets you once with a short **Cognitive Linking** welcome — three calm steps explaining the single idea the whole app is built around: keep your photos and files wherever they already live, and store only the *meaning* and a pointer to them here. The link itself is invisible — it lives in your mind; MemoryOS just keeps the thread. You can start right away or dismiss it with **I'll start later**; it appears only that once. You can reopen it any time from the **How Cognitive Linking works** link on the Second Brain screen. See sections 3 and 4 for the full workflow.
-
 ### Installing it as an app (recommended)
 
 Installing puts MemoryOS on your home screen or desktop, makes it open full-screen like a native app, and tells the browser that your data is important and should not be cleared automatically.
@@ -113,23 +109,15 @@ Inside the Memory Card form, under "Where are the photos?", press **+ Add where 
 
 You can add more than one link to a single Memory Card — for example, if photos are spread across a Facebook album and a local backup drive.
 
-### Archives: family, and everything else
+### The Family Archive habit
 
-The Family Archive is the easiest place to start, but the same habit fits anything you want to be able to return to. Keep a clearly-named archive per theme, wherever you already store media, following the pattern **MemoryOS - \<Topic\> Archive**:
+When you experience an important family event, do two things: upload your best photos to a private album called **MemoryOS - Family Archive** (in Facebook, Google Photos, or wherever you prefer), then create a Memory Card in MemoryOS with a Cognitive Link pointing there.
 
-- **MemoryOS - Family Archive** — reunions, birthdays, ordinary days worth keeping
-- **MemoryOS - Travel Archive** — trips, places, the views you don't want to forget
-- **MemoryOS - Learning Archive** — courses, books, notes, things you figured out
-- **MemoryOS - Work Archive** — projects shipped, milestones, proof of what you built
-- **MemoryOS - Friends Archive** — the people and the moments with them
-
-When something matters, add a few items to the right archive, then create a Memory Card here with a Cognitive Link pointing to it. MemoryOS becomes the *map*; the archive stays the *storage*. You control both, and neither owns your memories.
-
-Need a refresher? Open the **How Cognitive Linking works** link in the top-right of the Second Brain screen (it's also offered in the empty timeline before you've made your first card). It shows the same three-step welcome you saw on first launch, with tap-to-copy buttons for each example archive name.
+MemoryOS becomes the *map*. The photo platform becomes the *storage*. You control both, and neither owns your memories.
 
 ### Why this matters
 
-Most people's important photos are scattered across five apps, three old phones, and two hard drives, with no context attached to any of them. A Memory Card fixes that: the meaning, the people, the reflection, and the location of the media — all in one place, searchable, private, and yours. The link is invisible and effortless to follow, which is the point: your own life stays easier to reach than the feed.
+Most people's important photos are scattered across five apps, three old phones, and two hard drives, with no context attached to any of them. A Memory Card fixes that: the meaning, the people, the reflection, and the location of the photos — all in one place, searchable, private, and yours.
 
 ---
 
@@ -188,7 +176,9 @@ MemoryOS includes an AI assistant that reasons over *your own life* — your mem
 
 ### Two ways to run it
 
-**Offline, inside your browser — no key needed.** Press **Run fully offline instead** and MemoryOS downloads a small AI model that runs entirely on your device. Nothing leaves your browser — not your question, not your memories. The first time, it downloads the model (about 900 MB) and stores it; after that it works with no internet at all. This mode needs Chrome or Edge (it uses your device's graphics through WebGPU) and a reasonably capable computer or phone. It is private and free — and a little less sharp than the cloud option below.
+**Offline, inside your browser — no key needed.** Choose a model size and press **Run in this browser**, and MemoryOS downloads a small AI model that runs entirely on your device. Nothing leaves your browser — not your question, not your memories. Two sizes are offered: a light **1B** model (~0.9 GB) for older or low-memory devices, and a **3B** model (~1.8 GB, recommended for 8 GB of RAM or more) that gives noticeably better answers. The first time, it downloads the model and stores it; after that it works with no internet at all. This mode needs Chrome or Edge (it uses your device's graphics through WebGPU). It is private and free — and still less sharp than the cloud option above.
+
+**Local Ollama (advanced — best on a capable PC).** If you run [Ollama](https://ollama.com) on the same machine, MemoryOS can use it instead. This runs larger, faster models on your computer's GPU directly — the best offline quality — while staying fully local and key-free. Start Ollama with `OLLAMA_ORIGINS="*"` so the browser may reach it, pull a model once (for example `ollama pull llama3.2`), then enter that model's name and press **Use local Ollama**.
 
 **Cloud, using an Anthropic API key.** Enter a key from console.anthropic.com and the assistant uses Claude, the most capable option, with noticeably better reasoning over your memories. Your key is stored only on this device. When you ask a question, only the memories relevant to that question are sent to Anthropic to answer it — never to anyone else. Get a key only if you want the extra quality; the offline mode needs nothing.
 

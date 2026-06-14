@@ -24,7 +24,6 @@ import {
   SB_CATEGORIES,
 } from "../services/mnemosyne-service.js";
 import { openMemoryCardCapture } from "./memory-card-capture.js";
-import { openCognitiveLinkingExplainer } from "./cognitive-linking-onboarding.js";
 import { el, emptyState, formatDayHeading } from "./components.js";
 import { showToast } from "./celebration.js";
 import * as memoryService from "../services/memory-service.js";
@@ -76,16 +75,10 @@ export class SecondBrainView {
     this.container.replaceChildren(
       el("header.view-head", {},
         el("h2.view-title", {}, "Second Brain"),
-        el("div.sb-head-actions", {},
-          el("button.btn.btn-quiet.sb-guide-link", {
-            type: "button",
-            onclick: () => openCognitiveLinkingExplainer(),
-          }, "How Cognitive Linking works"),
-          el("button.btn.btn-primary.mc-fab-btn", {
-            type: "button",
-            onclick: () => openMemoryCardCapture(),
-          }, "+ Memory Card")
-        )
+        el("button.btn.btn-primary.mc-fab-btn", {
+          type: "button",
+          onclick: () => openMemoryCardCapture(),
+        }, "+ Memory Card")
       ),
       this._statsBar(stats),
       this._todayContext(context),
@@ -345,14 +338,6 @@ export class SecondBrainView {
         : `No ${SB_CATEGORIES.find(c => c.id === this.category)?.label ?? "entries"} yet.`,
       "Click \"+ Memory Card\" to preserve your first meaningful memory."
     );
-    if (this.category === "all") {
-      e.append(
-        el("button.btn.btn-quiet.sb-guide-link", {
-          type: "button",
-          onclick: () => openCognitiveLinkingExplainer(),
-        }, "How Cognitive Linking works")
-      );
-    }
     return e;
   }
 }
