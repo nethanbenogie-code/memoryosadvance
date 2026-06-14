@@ -5,6 +5,18 @@ All notable changes to MemoryOS are recorded here. The format follows
 `CACHE_VERSION` in `sw.js` as its release version — bumping it is how an
 update reaches users offline.
 
+## [0.3.9] — 2026-06-14
+
+### Added
+- Device capability check: opening the AI Assistant now probes WebGPU,
+  f16 support, GPU buffer limits, and RAM. If the device can't run the
+  in-browser model, the offline option is disabled with a message steering
+  the user to the Anthropic API (Claude).
+
+### Changed
+- The in-browser default model is now the 3B (was 1B). Low-RAM devices can
+  still pick 1B from the dropdown.
+
 ## [0.3.8] — 2026-06-13
 
 ### Added

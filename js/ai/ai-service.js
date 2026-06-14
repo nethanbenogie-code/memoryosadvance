@@ -32,7 +32,7 @@ export const WEBLLM_MODELS = [
   { id: "Llama-3.2-1B-Instruct-q4f16_1-MLC", label: "Fast & light — 1B (older / low-RAM devices, ~0.9GB)" },
   { id: "Llama-3.2-3B-Instruct-q4f16_1-MLC", label: "Balanced — 3B (8GB+ RAM, recommended, ~1.8GB)" },
 ];
-const DEFAULT_WEBLLM_MODEL = WEBLLM_MODELS[0].id;
+const DEFAULT_WEBLLM_MODEL = WEBLLM_MODELS[1].id; // 3B — recommended default
 const DEFAULT_OLLAMA_MODEL = "llama3.2";
 
 const MAX_TOKENS = 1024;
@@ -110,6 +110,39 @@ async function ensureWebLLM(onStatus) {
   });
   _webllmModel = modelId;
   return _webllmEngine;
+}
+
+/**
+ * Probe whether this device can actually run the in-browser model, BEFORE the
+ * user commits to a download. The browser path needs WebGPU, an f16-capable
+ * adapter (our models are q4f16), and enough buffer headroom. Returns
+ * { capable, reason } so the UI can disable offline and steer to the cloud.
+ */
+export async function detectWebllmCapability() {
+  if (!("gpu" in navigator) || !navigator.gpu) {
+    return { capable: false, reason: "no-webgpu" };
+  }
+  let adapter = null;
+  try {
+    adapter = await navigator.gpu.requestAdapter();
+  } catch {
+    adapter = null;
+  }
+  if (!adapter) return { capable: false, reason: "no-adapter" };
+
+  // q4f16 weights require the shader-f16 feature — hard requirement.
+  if (!adapter.features?.has?.("shader-f16")) {
+    return { capable: false, reason: "no-f16" };
+  }
+  // Need room to allocate weight buffers; very small limits can't hold a model.
+  if ((adapter.limits?.maxBufferSize ?? 0) < (1 << 28)) { // 256MB, conservative
+    return { capable: false, reason: "low-gpu" };
+  }
+  // deviceMemory is coarse (Chrome caps the report at 8) but flags tiny RAM.
+  if ((navigator.deviceMemory ?? 8) < 4) {
+    return { capable: false, reason: "low-memory" };
+  }
+  return { capable: true, reason: "ok" };
 }
 
 /* ─────────────────────────── context builder ─────────────────────────── */

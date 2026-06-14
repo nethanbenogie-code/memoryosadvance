@@ -22,7 +22,7 @@ export class AIView {
     if (await ai.isReady()) {
       await this.renderChat();
     } else {
-      this.renderSetup();
+      await this.renderSetup();
     }
   }
 
@@ -30,7 +30,7 @@ export class AIView {
 
   /* ─────────────────── API key setup screen ──────────────────── */
 
-  renderSetup() {
+  async renderSetup() {
     const keyInput = el("input.lock-input.ai-key-input", {
       type: "password",
       placeholder: "sk-ant-api...",
@@ -85,6 +85,19 @@ export class AIView {
       if (e.key === "Enter") saveBtn.click();
     });
 
+    // Detect whether this device can actually run the in-browser model.
+    // If not, disable the offline option and steer the user to the cloud API.
+    const cap = await ai.detectWebllmCapability();
+    let offlineMsg = "Runs a small model inside your browser — no key, no server, works offline after the first download (1B ~0.9GB, 3B ~1.8GB, cached). Needs Chrome or Edge. Nothing leaves your device.";
+    if (!cap.capable) {
+      modelSelect.disabled = true;
+      browserBtn.disabled = true;
+      browserBtn.textContent = "Not available on this device";
+      offlineMsg = (cap.reason === "no-webgpu" || cap.reason === "no-adapter")
+        ? "This browser can't run the in-browser model (no WebGPU). Use Chrome or Edge — or use the Anthropic API above to run Claude."
+        : "Your device isn't compatible to run this model yet. Use the Anthropic API above to run Claude instead.";
+    }
+
     this.container.replaceChildren(
       el("header.view-head", {}, el("h2.view-title", {}, "AI Assistant")),
       el("div.ai-setup", {},
@@ -109,7 +122,7 @@ export class AIView {
         el("label.mc-label", {}, "Offline, in this browser (WebGPU)"),
         modelSelect,
         browserBtn,
-        el("p.ai-privacy", {}, "Runs a small model inside your browser — no key, no server, works offline after the first download (1B ~0.9GB, 3B ~1.8GB, cached). Needs Chrome or Edge. Nothing leaves your device."),
+        el("p.ai-privacy", {}, offlineMsg),
 
         el("label.mc-label", { style: "margin-top:14px;" }, "Local Ollama (advanced — best speed)"),
         ollamaInput,
