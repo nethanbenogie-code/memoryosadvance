@@ -5,6 +5,17 @@ All notable changes to MemoryOS are recorded here. The format follows
 `CACHE_VERSION` in `sw.js` as its release version — bumping it is how an
 update reaches users offline.
 
+## [0.3.10] — 2026-06-14
+
+### Added
+- **Assistant can save to memory (opt-in).** A "Saving" toggle in the AI
+  header (off by default) lets the assistant propose notes, ideas, tasks,
+  events, or Memory Cards. Every write is shown first with Save / Cancel —
+  nothing is written without confirmation. Saves go through the normal
+  capture pipeline, so they index for search and semantic retrieval.
+- Cross-provider: works with the cloud key, WebLLM, and Ollama via a
+  structured-output action block (no reliance on tool-calling).
+
 ## [0.3.9] — 2026-06-14
 
 ### Added

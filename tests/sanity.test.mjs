@@ -304,6 +304,17 @@ test("Semantic service exposes its API and imports cleanly", async () => {
   assert(sem.state && sem.state.ready === false && sem.state.indexing === false);
 });
 
+test("AI write proposal parses an action block and strips it", async () => {
+  const ai = await import("../js/ai/ai-service.js");
+  const resp = 'Sure, saving that.\n```action\n{"action":"create","type":"note","title":"Call supplier","content":"about the order","tags":["work"]}\n```';
+  const { text, action } = ai.parseWriteProposal(resp);
+  assert(action && action.type === "note", "expected a note action");
+  assert(action.title === "Call supplier", "title parsed");
+  assert(action.tags.length === 1 && action.tags[0] === "work", "tags parsed");
+  assert(!text.includes("```"), "action block stripped from text");
+  assert(ai.parseWriteProposal("You have 3 tasks pending.").action === null, "no action on plain text");
+});
+
 test("AI modules import cleanly without a DOM", async () => {
   await import("../js/ai/ai-service.js");
   await import("../js/ai/ai-view.js");

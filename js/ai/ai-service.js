@@ -24,6 +24,7 @@ import * as repo from "../data/repository.js";
 import { MemoryType, TaskStatus, typeLabel } from "../data/models.js";
 import { dayKey, dayBounds } from "../services/journal-service.js";
 import * as semantic from "../services/semantic-service.js";
+import { capture } from "../services/memory-service.js";
 
 const ANTHROPIC_MODEL = "claude-sonnet-4-6";
 
@@ -81,6 +82,69 @@ export async function getOllamaModel() {
 }
 export async function setOllamaModel(name) {
   await repo.setMeta("ai_ollama_model", name || DEFAULT_OLLAMA_MODEL);
+}
+
+/* ─────────────────── saving to memory (opt-in, off by default) ───────── */
+/* When enabled, the assistant may PROPOSE a memory to save. The user always
+ * confirms before anything is written — important because the small local
+ * models can misread intent. All writes go through the normal capture path,
+ * so they index for search + semantic automatically. */
+
+export async function getCanWrite() {
+  return (await repo.getMeta("ai_can_write")) === true;
+}
+export async function setCanWrite(on) {
+  await repo.setMeta("ai_can_write", !!on);
+}
+
+const WRITE_TYPES = new Set(["note", "idea", "task", "event", "memory_card"]);
+
+/**
+ * Pull a save-proposal out of a model response. Returns the text to show
+ * (with the action block stripped) and a normalized action, or null.
+ * Tolerant of the messy output small models produce.
+ * @param {string} responseText
+ * @returns {{ text: string, action: null | {type:string,title:string,content:string,tags:string[]} }}
+ */
+export function parseWriteProposal(responseText) {
+  if (!responseText) return { text: responseText, action: null };
+
+  let jsonStr = null, full = null;
+  const fenced = responseText.match(/```(?:action|json)?\s*(\{[\s\S]*?\})\s*```/i);
+  if (fenced) { jsonStr = fenced[1]; full = fenced[0]; }
+  else {
+    const bare = responseText.match(/\{[\s\S]*?"action"\s*:\s*"create"[\s\S]*?\}/i);
+    if (bare) { jsonStr = bare[0]; full = bare[0]; }
+  }
+  if (!jsonStr) return { text: responseText, action: null };
+
+  let parsed;
+  try { parsed = JSON.parse(jsonStr); } catch { return { text: responseText, action: null }; }
+  if (parsed?.action !== "create" || !WRITE_TYPES.has(parsed.type)) {
+    return { text: responseText, action: null };
+  }
+
+  const action = {
+    type: parsed.type,
+    title: String(parsed.title ?? "").slice(0, 200).trim(),
+    content: String(parsed.content ?? "").slice(0, 4000).trim(),
+    tags: Array.isArray(parsed.tags) ? parsed.tags.map((t) => String(t).replace(/^#/, "")).slice(0, 10) : [],
+  };
+  if (!action.title && !action.content) return { text: responseText, action: null };
+
+  const text = responseText.replace(full, "").trim();
+  return { text: text || `I'll save this as a ${action.type.replace("_", " ")}.`, action };
+}
+
+/**
+ * Execute a confirmed save through the normal capture pipeline.
+ * @param {{type:string,title:string,content:string,tags:string[]}} action
+ */
+export async function applyAction(action) {
+  if (!action || !WRITE_TYPES.has(action.type)) throw new Error("Invalid save");
+  const tagLine = (action.tags || []).map((t) => "#" + t).join(" ");
+  const raw = [action.title, action.content].filter(Boolean).join("\n") + (tagLine ? "\n" + tagLine : "");
+  return await capture(raw, { type: action.type });
 }
 
 /** Ready to chat with the current provider? Anthropic needs a key;
@@ -288,7 +352,19 @@ export async function buildContext() {
 
 /* ────────────────────────── system prompt ───────────────────────────── */
 
-function buildSystemPrompt(context) {
+function buildSystemPrompt(context, canWrite = false) {
+  const writeBlock = canWrite
+    ? `SAVING TO MEMORY (enabled):
+The user has allowed you to save to their memory. When — and ONLY when — they clearly ask you to save, add, note, remember, or create something, do BOTH of these:
+1. Write one short sentence telling them what you'll save.
+2. On a new line, output exactly one fenced code block tagged "action" containing JSON:
+\`\`\`action
+{"action":"create","type":"note","title":"short title","content":"the details","tags":["optional"]}
+\`\`\`
+Rules: "type" must be one of note, idea, task, event, memory_card. Keep the title short; put detail in content. Only add tags the user implied. Output the action block ONLY for genuine save requests — never for ordinary questions. Do not say you already saved it; the user confirms first.`
+    : `YOU ARE READ-ONLY:
+You can read and reason over the user's data, but you cannot create, edit, or delete it. If they ask you to save, add, remember, or change something ("save my number", "add a task", "remember this"), explain briefly that you can't write to their memory, and tell them to use Quick Capture — the + button, or Ctrl+K (⌘K on Mac). Don't pretend you saved it.`;
+
   return `You are the MemoryOS AI assistant — a personal reasoning engine that helps the user understand, reflect on, and act on their own life data. You are NOT a general-purpose chatbot. You reason specifically over the user's memories, journal entries, tasks, and personal records provided below.
 
 ABOUT THIS DATA — READ CAREFULLY:
@@ -297,8 +373,7 @@ Everything in the context below belongs to the user you are talking to. It is th
 - When they ask for their journal, tasks, notes, phone numbers, or anything else in the context, surface it directly and plainly. That is your core job.
 - If something they ask for is genuinely not in the context, say so briefly and honestly — don't refuse on "privacy" grounds, just say it isn't in their data.
 
-YOU ARE READ-ONLY:
-You can read and reason over the user's data, but you cannot create, edit, or delete it. If they ask you to save, add, remember, or change something ("save my number", "add a task", "remember this"), explain briefly that you can't write to their memory, and tell them to use Quick Capture — the + button, or Ctrl+K (⌘K on Mac). Don't pretend you saved it.
+${writeBlock}
 
 Your personality:
 - Calm, thoughtful, and personal — like a trusted advisor who knows the user's life
@@ -364,7 +439,8 @@ export async function chat(userMessage, onStatus) {
   }
 
   const context = await buildContext();
-  const systemPrompt = buildSystemPrompt(relevant ? relevant + "\n" + context : context);
+  const canWrite = await getCanWrite();
+  const systemPrompt = buildSystemPrompt(relevant ? relevant + "\n" + context : context, canWrite);
 
   conversationHistory.push({ role: "user", content: userMessage });
   const messages = conversationHistory.slice(-20); // bound to last 20 turns

@@ -196,6 +196,10 @@ When the assistant is empty it offers a few starting questions drawn from your a
 
 It answers from your saved memories and is honest when something is not there — it will not invent memories or tasks, and it is not a general-purpose chatbot. Think of it as a reasoning partner for your own life, kept deliberately focused on it.
 
+### Letting it save to your memory (optional)
+
+By default the assistant is **read-only** — it reads and reasons, but never changes your data. If you'd like, you can turn on **Saving** with the toggle in the assistant's header (it reads **✎ Saving: On** or **Off**). With it on, you can say things like "make a note that I need to call the supplier" or "save this as a task," and the assistant will *propose* the entry — showing you exactly what it will save — with **Save** and **Cancel** buttons. Nothing is written until you tap **Save**, and anything you do save lands in your timeline and becomes searchable like any manual capture. This is a newer, optional feature, and the confirm step is there on purpose: the smaller offline models can occasionally misread what you meant, so you always get the final say.
+
 ---
 
 ## 9. Tasks
