@@ -239,13 +239,6 @@ export function typeLabel(type) {
     [MemoryType.MEMORY_CARD]: "Memory Card",
     [MemoryType.LEARNING]: "Learning",
     [MemoryType.ARTICLE]: "Article",
-    [MemoryType.REMINDER]: "Reminder",
-    [MemoryType.MEETING]: "Meeting",
-    [MemoryType.PERSON]: "Person",
-    [MemoryType.PROJECT]: "Project",
-    [MemoryType.FILE]: "File",
-    [MemoryType.WEBSITE]: "Website",
-    [MemoryType.CONVERSATION]: "Conversation",
   };
   return labels[type] ?? type;
 }

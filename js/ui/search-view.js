@@ -9,6 +9,7 @@
 import { MemoryType, typeLabel } from "../data/models.js";
 import { searchIndex } from "../services/search-service.js";
 import { el, emptyState, memoryCard } from "./components.js";
+import { openMemoryDetail } from "./memory-detail.js";
 
 const FILTER_TYPES = [
   MemoryType.NOTE,
@@ -124,6 +125,7 @@ export class SearchView {
 
     const cards = results.map((memory) =>
       memoryCard(memory, {
+        onOpen: (m) => openMemoryDetail(m),
         onTagClick: (tag) => {
           this.tagFilter = tag;
           this.renderFilters();

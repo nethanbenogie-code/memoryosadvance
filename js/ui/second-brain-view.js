@@ -24,6 +24,8 @@ import {
   SB_CATEGORIES,
 } from "../services/mnemosyne-service.js";
 import { openMemoryCardCapture } from "./memory-card-capture.js";
+import { openMemoryDetail } from "./memory-detail.js";
+import { openCognitiveLinkingExplainer } from "./cognitive-linking-onboarding.js";
 import { el, emptyState, formatDayHeading } from "./components.js";
 import { showToast } from "./celebration.js";
 import * as memoryService from "../services/memory-service.js";
@@ -75,10 +77,16 @@ export class SecondBrainView {
     this.container.replaceChildren(
       el("header.view-head", {},
         el("h2.view-title", {}, "Second Brain"),
-        el("button.btn.btn-primary.mc-fab-btn", {
-          type: "button",
-          onclick: () => openMemoryCardCapture(),
-        }, "+ Memory Card")
+        el("div.sb-head-actions", {},
+          el("button.btn.btn-quiet.sb-guide-link", {
+            type: "button",
+            onclick: () => openCognitiveLinkingExplainer(),
+          }, "How Cognitive Linking works"),
+          el("button.btn.btn-primary.mc-fab-btn", {
+            type: "button",
+            onclick: () => openMemoryCardCapture(),
+          }, "+ Memory Card")
+        )
       ),
       this._statsBar(stats),
       this._todayContext(context),
@@ -145,8 +153,8 @@ export class SecondBrainView {
           el("h3.ctx-heading", {}, "On this day in past years"),
           ...ctx.onThisDay.slice(0, 3).map((m) =>
             el("div.ctx-item.ctx-clickable", {
-              onclick: () => scrollToMemory(m.id),
-              title: "Click to find in your timeline",
+              onclick: () => openMemoryDetail(m),
+              title: "Click to read",
             },
               el("span.ctx-icon", {}, typeIcon(m.type)),
               el("div.ctx-body", {},
@@ -324,9 +332,20 @@ export class SecondBrainView {
     return el(
       `article.sb-entry${isMilestone ? ".sb-milestone" : ""}`,
       { dataset: { id: memory.id, type: memory.type } },
-      header, title, body,
-      ...extras,
-      tags,
+      el("div.sb-entry-main", {
+        role: "button",
+        tabindex: "0",
+        "aria-label": `Open ${displayTitle}`,
+        title: "Click to read",
+        onclick: () => openMemoryDetail(memory),
+        onkeydown: (e) => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openMemoryDetail(memory); }
+        },
+      },
+        header, title, body,
+        ...extras,
+        tags,
+      ),
       actions
     );
   }
@@ -338,6 +357,14 @@ export class SecondBrainView {
         : `No ${SB_CATEGORIES.find(c => c.id === this.category)?.label ?? "entries"} yet.`,
       "Click \"+ Memory Card\" to preserve your first meaningful memory."
     );
+    if (this.category === "all") {
+      e.append(
+        el("button.btn.btn-quiet.sb-guide-link", {
+          type: "button",
+          onclick: () => openCognitiveLinkingExplainer(),
+        }, "How Cognitive Linking works")
+      );
+    }
     return e;
   }
 }
@@ -379,9 +406,4 @@ function formatDayHeadingShort(iso) {
 function truncate(text, max) {
   const clean = (text ?? "").trim();
   return clean.length > max ? clean.slice(0, max - 1) + "…" : clean;
-}
-
-function scrollToMemory(id) {
-  const el_ = document.querySelector(`[data-id="${id}"]`);
-  el_?.scrollIntoView({ behavior: "smooth", block: "center" });
 }

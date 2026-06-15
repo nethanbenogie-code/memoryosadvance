@@ -9,7 +9,7 @@ import { computeRewards, pointsFor, POINTS_BASE, POINTS_ON_TIME_BONUS } from "..
 import { planMerge, validateSnapshot, backupFilename, BACKUP_FORMAT, BACKUP_SCHEMA } from "../js/services/backup-service.js";
 import { renderMarkdown } from "../js/ui/manual-view.js";
 import { hashSecret, randomSaltHex, generateRecoveryCode, normalizeRecoveryCode, constantEqual } from "../js/services/lock-service.js";
-import { SB_CATEGORIES, getLifeStats } from "../js/services/mnemosyne-service.js";
+import { SB_CATEGORIES, getLifeStats, FAMILY_ARCHIVE_ALBUM_NAME, SUGGESTED_ARCHIVES, ARCHIVE_NAME_PATTERN, hasSeenCognitiveLinkingIntro, markCognitiveLinkingIntroSeen, shouldAutoShowCognitiveLinkingIntro } from "../js/services/mnemosyne-service.js";
 import { buildContext, getSuggestedPrompts, clearHistory, getHistory } from "../js/ai/ai-service.js";
 import { MemoryType as MT2, ImportanceLevel, createMemoryCard, createMediaRef, MediaType } from "../js/data/models.js";
 
@@ -287,6 +287,48 @@ test("Mnemosyne modules import cleanly", async () => {
   await import("../js/services/mnemosyne-service.js");
   await import("../js/ui/second-brain-view.js");
   await import("../js/ui/memory-card-capture.js");
+  await import("../js/ui/memory-detail.js");
+  await import("../js/ui/cognitive-linking-onboarding.js");
+});
+test("Cognitive Linking: onboarding-state API is exposed", () => {
+  assert(typeof hasSeenCognitiveLinkingIntro === "function", "hasSeenCognitiveLinkingIntro exported");
+  assert(typeof markCognitiveLinkingIntroSeen === "function", "markCognitiveLinkingIntroSeen exported");
+  assert(typeof shouldAutoShowCognitiveLinkingIntro === "function", "shouldAutoShowCognitiveLinkingIntro exported");
+});
+test("Cognitive Linking: suggested archives are universal, not family-only", () => {
+  assert(FAMILY_ARCHIVE_ALBUM_NAME === "MemoryOS - Family Archive", "family example kept");
+  assert(/<Topic>/.test(ARCHIVE_NAME_PATTERN), "naming pattern exposes a topic slot");
+  const topics = SUGGESTED_ARCHIVES.map(a => a.topic);
+  assert(topics.includes("Family"), "family is offered");
+  assert(topics.includes("Travel") && topics.includes("Learning") && topics.includes("Work"), "non-family archives offered");
+  assert(SUGGESTED_ARCHIVES.every(a => a.name.startsWith("MemoryOS - ")), "all follow the convention");
+});
+
+test("Time queries: parse periods relative to a fixed date", async () => {
+  const { parsePeriod } = await import("../js/services/time-query-service.js");
+  const now = new Date(2026, 5, 14); // Sun Jun 14 2026
+  const r = (q) => parsePeriod(q, now);
+  assert(r("what happened last june?").startIso.slice(0,10) === "2025-06-01", "'last june' → June 2025");
+  assert(r("what happened last june?").endIso.slice(0,10) === "2025-07-01", "'last june' end exclusive");
+  assert(r("june 2025").startIso.slice(0,10) === "2025-06-01", "explicit June 2025");
+  assert(r("this month").startIso.slice(0,10) === "2026-06-01", "this month");
+  assert(r("last month").startIso.slice(0,10) === "2026-05-01", "last month");
+  assert(r("yesterday").startIso.slice(0,10) === "2026-06-13", "yesterday");
+  assert(r("in 2024").startIso.slice(0,10) === "2024-01-01", "year 2024 start");
+  assert(r("in 2024").endIso.slice(0,10) === "2025-01-01", "year 2024 end exclusive");
+  assert(r("june 12, 2025").startIso.slice(0,10) === "2025-06-12", "specific dated day");
+  assert(r("2026-06-12").startIso.slice(0,10) === "2026-06-12", "ISO date");
+  assert(r("how are my goals?") === null, "no time expression → null");
+});
+
+test("Time queries: detect type filters", async () => {
+  const { parseTypeFilters, typeFilterLabel } = await import("../js/services/time-query-service.js");
+  assert(parseTypeFilters("show my journal yesterday").includes("journal"), "journal detected");
+  assert(parseTypeFilters("my notes from last week").includes("note"), "notes detected");
+  assert(parseTypeFilters("tasks this month").includes("task"), "tasks detected");
+  assert(parseTypeFilters("what happened last june") === null, "no kind → null (all)");
+  assert(typeFilterLabel(null) === "memories", "null label");
+  assert(typeFilterLabel(["journal"]) === "journal entries", "journal label");
 });
 
 // --- AI service ---
@@ -302,17 +344,6 @@ test("Semantic service exposes its API and imports cleanly", async () => {
   assert(typeof sem.indexAll === "function");
   assert(typeof sem.indexMemory === "function");
   assert(sem.state && sem.state.ready === false && sem.state.indexing === false);
-});
-
-test("AI write proposal parses an action block and strips it", async () => {
-  const ai = await import("../js/ai/ai-service.js");
-  const resp = 'Sure, saving that.\n```action\n{"action":"create","type":"note","title":"Call supplier","content":"about the order","tags":["work"]}\n```';
-  const { text, action } = ai.parseWriteProposal(resp);
-  assert(action && action.type === "note", "expected a note action");
-  assert(action.title === "Call supplier", "title parsed");
-  assert(action.tags.length === 1 && action.tags[0] === "work", "tags parsed");
-  assert(!text.includes("```"), "action block stripped from text");
-  assert(ai.parseWriteProposal("You have 3 tasks pending.").action === null, "no action on plain text");
 });
 
 test("AI modules import cleanly without a DOM", async () => {

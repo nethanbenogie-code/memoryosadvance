@@ -241,3 +241,89 @@ export async function getMemoriesByLocation(location) {
     m.extra?.location?.toLowerCase().includes(loc)
   );
 }
+
+/* ===================== COGNITIVE LINKING ONBOARDING ===================== */
+
+/**
+ * Cognitive Linking is the core primitive of MemoryOS: a Memory Card holds
+ * the *meaning* of a moment and a *pointer* to where its media actually
+ * lives — never the media itself. The link is invisible; it lives in the
+ * user's mind, and the app only keeps the thread so it's never lost.
+ *
+ * An "archive" is just a clearly-named place the user already controls
+ * (an album, a folder, a drive). The Family Archive is the most relatable
+ * starting point, but the same pattern fits any theme — hence the
+ * suggestions below. These are guidance, not constraints: a Cognitive
+ * Link can point anywhere, and naming an archive is entirely optional.
+ */
+
+/** The flagship example archive — the most natural place to begin. */
+export const FAMILY_ARCHIVE_ALBUM_NAME = "MemoryOS - Family Archive";
+
+/** The naming convention we suggest for any themed archive. */
+export const ARCHIVE_NAME_PATTERN = "MemoryOS - <Topic> Archive";
+
+/**
+ * A small, universal set of example archives. Family leads because it's
+ * the easiest to feel; the rest show that the idea isn't about family at
+ * all — it's about giving any kind of meaning a place to live.
+ */
+export const SUGGESTED_ARCHIVES = Object.freeze([
+  { topic: "Family",   name: "MemoryOS - Family Archive" },
+  { topic: "Travel",   name: "MemoryOS - Travel Archive" },
+  { topic: "Learning", name: "MemoryOS - Learning Archive" },
+  { topic: "Work",     name: "MemoryOS - Work Archive" },
+  { topic: "Friends",  name: "MemoryOS - Friends Archive" },
+]);
+
+// Legacy key name, kept stable so users who already dismissed the intro
+// aren't shown it again after the rename to "Cognitive Linking".
+const COGNITIVE_LINKING_INTRO_KEY = "familyArchiveIntroSeenAt";
+const FIRST_LAUNCH_KEY = "firstLaunchAt";
+
+/**
+ * Whether the user has already seen (and thereby dismissed) the Cognitive
+ * Linking intro. Once true, the intro never auto-opens again, though it
+ * can always be reopened on demand.
+ * @returns {Promise<boolean>}
+ */
+export async function hasSeenCognitiveLinkingIntro() {
+  return Boolean(await repo.getMeta(COGNITIVE_LINKING_INTRO_KEY));
+}
+
+/**
+ * Record that the Cognitive Linking intro has been seen (ISO timestamp),
+ * so it won't auto-open again. Idempotent.
+ */
+export async function markCognitiveLinkingIntroSeen() {
+  await repo.setMeta(COGNITIVE_LINKING_INTRO_KEY, new Date().toISOString());
+}
+
+/**
+ * Decide whether to auto-open the Cognitive Linking intro on this launch.
+ *
+ * The signal is the first launch of the app on this device. A brand-new
+ * user is greeted exactly once (the caller marks it seen as it shows). A
+ * user who was already using MemoryOS before this feature shipped is
+ * detected the first time we record the launch flag — if prior data
+ * already exists, they're a returning user and are never interrupted.
+ *
+ * Side effect: records the first-launch timestamp the first time it runs.
+ * @returns {Promise<boolean>}
+ */
+export async function shouldAutoShowCognitiveLinkingIntro() {
+  if (await hasSeenCognitiveLinkingIntro()) return false;
+
+  const firstLaunch = await repo.getMeta(FIRST_LAUNCH_KEY);
+  if (!firstLaunch) {
+    await repo.setMeta(FIRST_LAUNCH_KEY, new Date().toISOString());
+    // First recorded launch but data already exists → an upgrade, not a
+    // true first run. Mark seen so we never ambush an existing user.
+    const stats = await getLifeStats();
+    if (stats.totalMemories > 0) {
+      await markCognitiveLinkingIntroSeen();
+      return false;
+    }
+  }
+  return true;
+}

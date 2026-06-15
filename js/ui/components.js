@@ -127,6 +127,22 @@ export function memoryCard(memory, opts = {}) {
     ? el("p.card-body", {}, truncate(memory.content, 280))
     : null;
 
+  // Optional: make the title + body a clickable opener (read full detail).
+  if (typeof opts.onOpen === "function") {
+    const open = () => opts.onOpen(memory);
+    for (const node of [title, body]) {
+      if (!node) continue;
+      node.classList.add("card-openable");
+      node.setAttribute("role", "button");
+      node.setAttribute("tabindex", "0");
+      node.title = "Click to read";
+      node.addEventListener("click", open);
+      node.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
+      });
+    }
+  }
+
   const tags = memory.tags.length
     ? el("div.card-tags", {}, ...memory.tags.map((t) => tagChip(t, opts.onTagClick)))
     : null;

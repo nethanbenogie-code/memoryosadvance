@@ -22,7 +22,7 @@ export class AIView {
     if (await ai.isReady()) {
       await this.renderChat();
     } else {
-      await this.renderSetup();
+      this.renderSetup();
     }
   }
 
@@ -30,7 +30,7 @@ export class AIView {
 
   /* ─────────────────── API key setup screen ──────────────────── */
 
-  async renderSetup() {
+  renderSetup() {
     const keyInput = el("input.lock-input.ai-key-input", {
       type: "password",
       placeholder: "sk-ant-api...",
@@ -56,47 +56,18 @@ export class AIView {
       await this.renderChat();
     });
 
-    // In-browser (WebLLM) — model selectable for the device's capability
-    const modelSelect = el("select.lock-input", {
-      "aria-label": "Offline model", style: "text-align:left;",
-    }, ...ai.WEBLLM_MODELS.map((m) => el("option", { value: m.id }, m.label)));
-    modelSelect.value = ai.WEBLLM_MODELS[ai.WEBLLM_MODELS.length - 1].id; // recommend the larger one
-    const browserBtn = el("button.btn.btn-quiet", { type: "button" }, "Run in this browser");
-    browserBtn.addEventListener("click", async () => {
-      await ai.setWebllmModel(modelSelect.value);
+    const offlineBtn = el("button.btn.btn-quiet", {
+      type: "button",
+      style: "margin-top:16px;",
+    }, "Run fully offline instead — no key");
+    offlineBtn.addEventListener("click", async () => {
       await ai.setProvider("webllm");
-      await this.renderChat();
-    });
-
-    // Local Ollama — native GPU, larger models, still local & key-free
-    const ollamaInput = el("input.lock-input", {
-      type: "text", value: "llama3.2", autocomplete: "off", spellcheck: "false",
-      "aria-label": "Ollama model name",
-      style: "text-align:left;font-family:monospace;font-size:13px;",
-    });
-    const ollamaBtn = el("button.btn.btn-quiet", { type: "button" }, "Use local Ollama");
-    ollamaBtn.addEventListener("click", async () => {
-      await ai.setOllamaModel(ollamaInput.value.trim());
-      await ai.setProvider("ollama");
       await this.renderChat();
     });
 
     keyInput.addEventListener("keydown", e => {
       if (e.key === "Enter") saveBtn.click();
     });
-
-    // Detect whether this device can actually run the in-browser model.
-    // If not, disable the offline option and steer the user to the cloud API.
-    const cap = await ai.detectWebllmCapability();
-    let offlineMsg = "Runs a small model inside your browser — no key, no server, works offline after the first download (1B ~0.9GB, 3B ~1.8GB, cached). Needs Chrome or Edge. Nothing leaves your device.";
-    if (!cap.capable) {
-      modelSelect.disabled = true;
-      browserBtn.disabled = true;
-      browserBtn.textContent = "Not available on this device";
-      offlineMsg = (cap.reason === "no-webgpu" || cap.reason === "no-adapter")
-        ? "This browser can't run the in-browser model (no WebGPU). Use Chrome or Edge — or use the Anthropic API above to run Claude."
-        : "Your device isn't compatible to run this model yet. Use the Anthropic API above to run Claude instead.";
-    }
 
     this.container.replaceChildren(
       el("header.view-head", {}, el("h2.view-title", {}, "AI Assistant")),
@@ -115,19 +86,9 @@ export class AIView {
         keyInput,
         error,
         saveBtn,
-        el("p.ai-privacy", {}, "🔒 With a key, only the memories relevant to a question are sent — to Anthropic alone."),
-
-        el("p", { style: "text-align:center;color:var(--ink-soft);margin:18px 0 4px;font-size:13px;" }, "— or run locally, no key —"),
-
-        el("label.mc-label", {}, "Offline, in this browser (WebGPU)"),
-        modelSelect,
-        browserBtn,
-        el("p.ai-privacy", {}, offlineMsg),
-
-        el("label.mc-label", { style: "margin-top:14px;" }, "Local Ollama (advanced — best speed)"),
-        ollamaInput,
-        ollamaBtn,
-        el("p.ai-privacy", {}, "If you run Ollama on this machine it uses your GPU natively and runs larger, faster models. Start it with OLLAMA_ORIGINS=\"*\" so the browser can reach it, and pull the model first (e.g. ollama pull llama3.2). Still fully local and key-free.")
+        el("p.ai-privacy", {}, "🔒 Your API key and your memories never leave your device except to call the Anthropic API directly."),
+        offlineBtn,
+        el("p.ai-privacy", {}, "Offline mode runs a small AI model inside your browser via WebGPU — no key, no server, and no internet after the first load (~900MB, cached). Needs Chrome or Edge.")
       )
     );
     keyInput.focus();
@@ -139,7 +100,6 @@ export class AIView {
     const provider = await ai.getProvider();
     const suggestions = await ai.getSuggestedPrompts();
     const history = ai.getHistory();
-    let writeOn = await ai.getCanWrite();
 
     const messagesEl = el("div.ai-messages", { role: "log", "aria-live": "polite" });
     const inputEl = el("textarea.ai-input", {
@@ -155,17 +115,7 @@ export class AIView {
       this.renderChat();
     }}, "Clear chat");
 
-    const writeBtn = el("button.btn.btn-quiet", {
-      type: "button",
-      title: "Let the assistant save notes, tasks, and cards (you confirm each one)",
-    }, writeOn ? "✎ Saving: On" : "✎ Saving: Off");
-    writeBtn.addEventListener("click", async () => {
-      writeOn = !writeOn;
-      await ai.setCanWrite(writeOn);
-      writeBtn.textContent = writeOn ? "✎ Saving: On" : "✎ Saving: Off";
-    });
-
-    const settingsBtn = provider !== "anthropic"
+    const settingsBtn = provider === "webllm"
       ? el("button.btn.btn-quiet", { type: "button", onclick: () => {
           ai.clearHistory();
           this.renderSetup();
@@ -211,11 +161,7 @@ export class AIView {
           thinkingEl.textContent = status;
         });
         thinkingEl.remove();
-        const { text: shown, action } = writeOn
-          ? ai.parseWriteProposal(response)
-          : { text: response, action: null };
-        messagesEl.append(this._bubble("assistant", shown));
-        if (action) messagesEl.append(this._writeConfirm(action));
+        messagesEl.append(this._bubble("assistant", response));
       } catch (err) {
         thinkingEl.remove();
         if (err.message === "NO_API_KEY") {
@@ -224,10 +170,8 @@ export class AIView {
         }
         if (err.message === "NO_WEBGPU") {
           messagesEl.append(this._bubble("error", "Offline AI needs WebGPU — use Chrome or Edge, or switch to an API key from AI settings."));
-        } else if (err.message === "OLLAMA_DOWN") {
-          messagesEl.append(this._bubble("error", "Can't reach Ollama. Make sure it's running, started with OLLAMA_ORIGINS=\"*\" so the browser can connect."));
-        } else if (err.message === "OLLAMA_MODEL") {
-          messagesEl.append(this._bubble("error", "That Ollama model isn't installed yet. Pull it first — e.g. run: ollama pull llama3.2 — then try again."));
+        } else if (err.message === "WEBLLM_LOST") {
+          messagesEl.append(this._bubble("error", "The offline model lost access to your device's GPU — this can happen under low memory, sometimes with a very large question. Reload the page to restart it, try a narrower date range, or switch to an API key in AI settings."));
         } else if (err.message === "INVALID_KEY") {
           messagesEl.append(this._bubble("error", "Your API key was rejected. Please reconnect with a valid key."));
         } else if (err.message === "RATE_LIMITED") {
@@ -251,7 +195,7 @@ export class AIView {
     this.container.replaceChildren(
       el("header.view-head", {},
         el("h2.view-title", {}, "AI Assistant"),
-        el("div.ai-header-actions", {}, writeBtn, clearBtn, settingsBtn)
+        el("div.ai-header-actions", {}, clearBtn, settingsBtn)
       ),
       messagesEl,
       el("div.ai-compose", {},
@@ -289,36 +233,6 @@ export class AIView {
   }
 
   /* ───────────────────────── chat bubble ─────────────────────── */
-
-  _writeConfirm(action) {
-    const labels = { note: "note", idea: "idea", task: "task", event: "event", memory_card: "Memory Card" };
-    const wrap = el("div.ai-write-confirm", {
-      style: "margin:6px 0 14px;padding:14px;border:1px solid var(--line,#e3e5ea);border-radius:12px;background:var(--surface,#fff);",
-    });
-    const preview = el("div", { style: "margin-bottom:10px;" },
-      el("div", { style: "font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-soft,#666);margin-bottom:4px;" }, "Save as " + (labels[action.type] || action.type)),
-      el("div", { style: "font-weight:600;" }, action.title || "(untitled)"),
-      action.content ? el("div", { style: "font-size:14px;color:var(--ink-soft,#555);margin-top:2px;white-space:pre-wrap;" }, action.content) : null,
-      action.tags?.length ? el("div", { style: "font-size:12px;color:var(--ink-faint,#999);margin-top:6px;" }, action.tags.map((t) => "#" + t).join(" ")) : null,
-    );
-    const saveBtn = el("button.btn.btn-primary", { type: "button", style: "padding:6px 14px;" }, "Save");
-    const cancelBtn = el("button.btn.btn-quiet", { type: "button", style: "padding:6px 14px;" }, "Cancel");
-    const done = (msg) => wrap.replaceChildren(el("div", { style: "font-size:14px;color:var(--ink-soft,#555);" }, msg));
-
-    saveBtn.addEventListener("click", async () => {
-      saveBtn.disabled = true; cancelBtn.disabled = true;
-      try {
-        await ai.applyAction(action);
-        done("✓ Saved to your memory — it's in your timeline now.");
-      } catch (e) {
-        done("Couldn't save that: " + e.message);
-      }
-    });
-    cancelBtn.addEventListener("click", () => done("Okay — didn't save that."));
-
-    wrap.append(preview, el("div", { style: "display:flex;gap:8px;" }, saveBtn, cancelBtn));
-    return wrap;
-  }
 
   _bubble(role, content, isThinking = false) {
     const bubble = el(`div.ai-bubble.ai-bubble-${role}`, {});
