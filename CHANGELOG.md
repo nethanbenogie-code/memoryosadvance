@@ -5,6 +5,28 @@ All notable changes to MemoryOS are recorded here. The format follows
 `CACHE_VERSION` in `sw.js` as its release version — bumping it is how an
 update reaches users offline.
 
+## [0.3.12] — 2026-06-14
+
+### Added
+- **Local Ollama provider for the AI assistant.** Point MemoryOS at an Ollama
+  server you run yourself (default `http://localhost:11434`, model `llama3.2`)
+  for a capable model that stays entirely on your machine — no key, no cloud.
+  The setup screen gained a **Use my local Ollama server** option that probes
+  the server (`/api/tags`), lists pulled models, and warns if the chosen model
+  isn't installed. Chats post to `/api/chat` with `stream:false` and a raised
+  `num_ctx` (8192) so the personal context isn't silently truncated.
+  - New service API: `getOllamaConfig`, `setOllamaConfig`, `checkOllama`, and an
+    `ollama` value for `setProvider`. `isReady()` treats Ollama as keyless.
+  - Clear, actionable errors: `OLLAMA_UNREACHABLE` (server down / origin
+    blocked) and `OLLAMA_MODEL_MISSING` (model not pulled), each surfaced with
+    guidance (including the `OLLAMA_ORIGINS=*` hint for installed-app origins).
+  - The system-prompt size clamp now applies to both local providers (a larger
+    budget for Ollama than the in-browser model).
+
+### Changed
+- `CACHE_VERSION` → `memoryos-v0.3.12`.
+- User Manual §8 and §18: document the Ollama option and its setup/troubleshooting.
+
 ## [0.3.11] — 2026-06-14
 
 ### Added

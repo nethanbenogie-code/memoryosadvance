@@ -30,7 +30,8 @@ export class AIView {
 
   /* ─────────────────── API key setup screen ──────────────────── */
 
-  renderSetup() {
+  async renderSetup() {
+    const ollamaCfg = await ai.getOllamaConfig();
     const keyInput = el("input.lock-input.ai-key-input", {
       type: "password",
       placeholder: "sk-ant-api...",
@@ -65,6 +66,69 @@ export class AIView {
       await this.renderChat();
     });
 
+    // ── Local Ollama option ──────────────────────────────────────────
+    const ollamaUrl = el("input.lock-input", {
+      type: "text", value: ollamaCfg.baseUrl, spellcheck: "false",
+      "aria-label": "Ollama server address",
+      style: "text-align:left;font-family:monospace;font-size:13px;-webkit-text-fill-color:var(--ink);caret-color:var(--accent);",
+    });
+    const ollamaModel = el("input.lock-input", {
+      type: "text", value: ollamaCfg.model, spellcheck: "false",
+      "aria-label": "Ollama model name",
+      style: "text-align:left;font-family:monospace;font-size:13px;-webkit-text-fill-color:var(--ink);caret-color:var(--accent);",
+    });
+    const ollamaStatus = el("p.lock-error", { "aria-live": "polite" }, "");
+    const ollamaConnect = el("button.btn.btn-primary", { type: "button" }, "Test & connect");
+
+    ollamaConnect.addEventListener("click", async () => {
+      const base = ollamaUrl.value.trim() || "http://localhost:11434";
+      const model = ollamaModel.value.trim() || "llama3.2";
+      ollamaConnect.disabled = true;
+      ollamaStatus.style.color = "var(--ink-soft)";
+      ollamaStatus.textContent = "Checking your Ollama server…";
+      try {
+        const { models } = await ai.checkOllama(base);
+        await ai.setOllamaConfig({ baseUrl: base, model });
+        await ai.setProvider("ollama");
+        if (models.length && !models.some((m) => m === model || m.startsWith(model + ":"))) {
+          ollamaStatus.style.color = "var(--ink-soft)";
+          ollamaStatus.textContent = `Connected, but "${model}" isn't pulled yet. Run: ollama pull ${model}`;
+        }
+        await this.renderChat();
+      } catch (err) {
+        ollamaStatus.style.color = "";
+        ollamaStatus.textContent = err.message === "OLLAMA_UNREACHABLE"
+          ? "Couldn't reach Ollama there. Is it running? If MemoryOS is installed as an app, you may need to allow this origin (see note)."
+          : `Couldn't connect: ${err.message}`;
+        ollamaConnect.disabled = false;
+      }
+    });
+
+    const ollamaPanel = el("div.ai-ollama-panel", { hidden: true },
+      el("label.mc-label", {}, "Ollama server address"),
+      ollamaUrl,
+      el("label.mc-label", { style: "margin-top:8px;" }, "Model"),
+      ollamaModel,
+      ollamaStatus,
+      ollamaConnect,
+      el("p.ai-privacy", {},
+        "Runs entirely on your machine — nothing leaves your network, no key needed. Start it with ",
+        el("code", {}, "ollama serve"),
+        " and pull a model with ",
+        el("code", {}, "ollama pull llama3.2"),
+        ". If MemoryOS is installed as an app and the connection is blocked, start Ollama with ",
+        el("code", {}, "OLLAMA_ORIGINS=* "),
+        "so the browser is allowed to reach it."
+      )
+    );
+
+    const ollamaToggle = el("button.btn.btn-quiet", { type: "button" },
+      "Use my local Ollama server (e.g. llama3.2)");
+    ollamaToggle.addEventListener("click", () => {
+      ollamaPanel.hidden = !ollamaPanel.hidden;
+      if (!ollamaPanel.hidden) ollamaUrl.focus();
+    });
+
     keyInput.addEventListener("keydown", e => {
       if (e.key === "Enter") saveBtn.click();
     });
@@ -87,8 +151,12 @@ export class AIView {
         error,
         saveBtn,
         el("p.ai-privacy", {}, "🔒 Your API key and your memories never leave your device except to call the Anthropic API directly."),
-        offlineBtn,
-        el("p.ai-privacy", {}, "Offline mode runs a small AI model inside your browser via WebGPU — no key, no server, and no internet after the first load (~900MB, cached). Needs Chrome or Edge.")
+        el("div.ai-alt-options", {},
+          ollamaToggle,
+          ollamaPanel,
+          offlineBtn,
+          el("p.ai-privacy", {}, "Offline mode runs a small AI model inside your browser via WebGPU — no key, no server, and no internet after the first load (~900MB, cached). Needs Chrome or Edge.")
+        )
       )
     );
     keyInput.focus();
@@ -115,7 +183,7 @@ export class AIView {
       this.renderChat();
     }}, "Clear chat");
 
-    const settingsBtn = provider === "webllm"
+    const settingsBtn = provider !== "anthropic"
       ? el("button.btn.btn-quiet", { type: "button", onclick: () => {
           ai.clearHistory();
           this.renderSetup();
@@ -170,6 +238,10 @@ export class AIView {
         }
         if (err.message === "NO_WEBGPU") {
           messagesEl.append(this._bubble("error", "Offline AI needs WebGPU — use Chrome or Edge, or switch to an API key from AI settings."));
+        } else if (err.message === "OLLAMA_UNREACHABLE") {
+          messagesEl.append(this._bubble("error", "Can't reach your Ollama server. Make sure it's running (ollama serve). If MemoryOS is installed as an app, start Ollama with OLLAMA_ORIGINS=* so the browser is allowed to connect. You can check the address in AI settings."));
+        } else if (err.message === "OLLAMA_MODEL_MISSING") {
+          messagesEl.append(this._bubble("error", "Ollama is running, but that model isn't pulled yet. Run `ollama pull llama3.2` (or your model name), or change the model in AI settings."));
         } else if (err.message === "WEBLLM_LOST") {
           messagesEl.append(this._bubble("error", "The offline model lost access to your device's GPU — this can happen under low memory, sometimes with a very large question. Reload the page to restart it, try a narrower date range, or switch to an API key in AI settings."));
         } else if (err.message === "INVALID_KEY") {

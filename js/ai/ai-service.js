@@ -28,6 +28,8 @@ import { parsePeriod, parseTypeFilters, typeFilterLabel } from "../services/time
 
 const ANTHROPIC_MODEL = "claude-sonnet-4-6";
 const WEBLLM_MODEL = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
+const DEFAULT_OLLAMA_URL = "http://localhost:11434";
+const DEFAULT_OLLAMA_MODEL = "llama3.2";
 const MAX_TOKENS = 1024;
 const MAX_CONTEXT_MEMORIES = 40;
 const MAX_DATED_ITEMS = 60;
@@ -49,8 +51,9 @@ export async function hasApiKey() {
 }
 
 /* ─────────────────────────── provider selection ──────────────────────── */
-/* "anthropic" (cloud, needs a key) or "webllm" (in-browser, no key, no
- * server). Stored in the meta store so it persists per device. */
+/* "anthropic" (cloud, needs a key), "ollama" (local server you run, e.g.
+ * llama3.2 — no key, no cloud), or "webllm" (in-browser, no key, no server).
+ * Stored in the meta store so it persists per device. */
 
 export async function getProvider() {
   return (await repo.getMeta("ai_provider")) || "anthropic";
@@ -60,11 +63,54 @@ export async function setProvider(provider) {
   await repo.setMeta("ai_provider", provider);
 }
 
-/** Ready to chat with the current provider? Anthropic needs a key;
- *  WebLLM needs nothing. The view uses this to decide what to show. */
+/** Ready to chat with the current provider? Anthropic needs a key; Ollama
+ *  and WebLLM need no key (Ollama's reachability is checked at chat time).
+ *  The view uses this to decide what to show. */
 export async function isReady() {
-  if ((await getProvider()) === "webllm") return true;
+  const provider = await getProvider();
+  if (provider === "webllm" || provider === "ollama") return true;
   return !!(await getApiKey());
+}
+
+/* ─────────────────────────── Ollama (local server) ───────────────────── */
+/* Talks to a locally-running Ollama instance over its HTTP API. Fully
+ * local — your data never leaves your machine, and no key is needed. The
+ * model (e.g. llama3.2) and base URL are configurable and stored per device. */
+
+export async function getOllamaConfig() {
+  return {
+    baseUrl: (await repo.getMeta("ollama_base_url")) || DEFAULT_OLLAMA_URL,
+    model: (await repo.getMeta("ollama_model")) || DEFAULT_OLLAMA_MODEL,
+  };
+}
+
+export async function setOllamaConfig({ baseUrl, model } = {}) {
+  if (baseUrl !== undefined) {
+    await repo.setMeta("ollama_base_url", baseUrl?.trim().replace(/\/+$/, "") || null);
+  }
+  if (model !== undefined) {
+    await repo.setMeta("ollama_model", model?.trim() || null);
+  }
+}
+
+/**
+ * Probe a local Ollama server and list the models it has pulled.
+ * @param {string} [baseUrl] Defaults to the saved/base URL.
+ * @returns {Promise<{ok: true, models: string[]}>}
+ * @throws Error("OLLAMA_UNREACHABLE") if the server can't be reached.
+ */
+export async function checkOllama(baseUrl) {
+  const url = (baseUrl || (await getOllamaConfig()).baseUrl).replace(/\/+$/, "");
+  let res;
+  try {
+    res = await fetch(`${url}/api/tags`, { method: "GET" });
+  } catch {
+    throw new Error("OLLAMA_UNREACHABLE");
+  }
+  if (!res.ok) throw new Error("OLLAMA_UNREACHABLE");
+  const data = await res.json().catch(() => ({}));
+  const models = Array.isArray(data.models) ? data.models.map((m) => m.name) : [];
+  return { ok: true, models };
 }
 
 /* ─────────────────────────── WebLLM (offline) ────────────────────────── */
@@ -424,7 +470,9 @@ export async function chat(userMessage, onStatus) {
     assistantMessage =
       provider === "webllm"
         ? await chatWebLLM(systemPrompt, messages, onStatus)
-        : await chatAnthropic(systemPrompt, messages);
+        : provider === "ollama"
+          ? await chatOllama(systemPrompt, messages, onStatus)
+          : await chatAnthropic(systemPrompt, messages);
   } catch (err) {
     conversationHistory.pop(); // drop the failed user turn
     throw err;
@@ -466,6 +514,47 @@ async function chatAnthropic(systemPrompt, messages) {
   return data.content.filter((b) => b.type === "text").map((b) => b.text).join("");
 }
 
+/** Local path: an Ollama server you run on your own machine (e.g.
+ *  llama3.2). No key, no cloud — the request stays on your network.
+ *
+ *  num_ctx is raised from Ollama's small default so the personal context
+ *  isn't silently truncated; the system prompt is also clamped to a safe
+ *  size as a backstop. */
+async function chatOllama(systemPrompt, messages, onStatus) {
+  const { baseUrl, model } = await getOllamaConfig();
+  const url = baseUrl.replace(/\/+$/, "") + "/api/chat";
+  const safeSystem = clampForLocal(systemPrompt, OLLAMA_SYSTEM_CHAR_BUDGET);
+
+  onStatus?.("Thinking…");
+  let res;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        stream: false,
+        messages: [{ role: "system", content: safeSystem }, ...messages],
+        options: { temperature: 0.4, num_predict: MAX_TOKENS, num_ctx: 8192 },
+      }),
+    });
+  } catch {
+    // Network/CORS failure — server down, wrong URL, or origin not allowed.
+    throw new Error("OLLAMA_UNREACHABLE");
+  }
+
+  if (res.status === 404) throw new Error("OLLAMA_MODEL_MISSING");
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e?.error || `Ollama error ${res.status}`);
+  }
+
+  const data = await res.json().catch(() => ({}));
+  const text = data?.message?.content?.trim();
+  if (!text) throw new Error("Ollama returned an empty response.");
+  return text;
+}
+
 /** Offline path: a small model running fully in-browser via WebGPU.
  *  Same personal context, zero network, zero key.
  *
@@ -476,7 +565,7 @@ async function chatWebLLM(systemPrompt, messages, onStatus) {
   // The 1B offline model has a small effective context; keep the prompt
   // within a safe budget so a large date-range block can't overflow it or
   // exhaust GPU memory (which is what disposes the engine).
-  const safeSystem = clampForWebLLM(systemPrompt);
+  const safeSystem = clampForLocal(systemPrompt, WEBLLM_SYSTEM_CHAR_BUDGET);
 
   let engine = await ensureWebLLM(onStatus);
   onStatus?.("Thinking…");
@@ -507,11 +596,12 @@ async function runWebLLM(engine, systemPrompt, messages) {
 }
 
 const WEBLLM_SYSTEM_CHAR_BUDGET = 8000;
-function clampForWebLLM(systemPrompt) {
-  if (systemPrompt.length <= WEBLLM_SYSTEM_CHAR_BUDGET) return systemPrompt;
+const OLLAMA_SYSTEM_CHAR_BUDGET = 24000;
+function clampForLocal(systemPrompt, budget) {
+  if (systemPrompt.length <= budget) return systemPrompt;
   return (
-    systemPrompt.slice(0, WEBLLM_SYSTEM_CHAR_BUDGET) +
-    "\n\n[Context truncated to fit the offline model. Ask about a narrower date range for full detail.]"
+    systemPrompt.slice(0, budget) +
+    "\n\n[Context truncated to fit the local model. Ask about a narrower date range for full detail.]"
   );
 }
 

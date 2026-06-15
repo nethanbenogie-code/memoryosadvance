@@ -194,7 +194,9 @@ MemoryOS includes an AI assistant that reasons over *your own life* — your mem
 
 **Cloud, using an Anthropic API key.** Enter a key from console.anthropic.com and the assistant uses Claude, the most capable option, with noticeably better reasoning over your memories. Your key is stored only on this device. When you ask a question, only the memories relevant to that question are sent to Anthropic to answer it — never to anyone else. Get a key only if you want the extra quality; the offline mode needs nothing.
 
-You can switch anytime. In offline mode the header shows **AI settings**; with a key it shows **Disconnect**. Either one returns you to the choice screen.
+**Your own local model with Ollama — no key, nothing leaves your machine.** If you run [Ollama](https://ollama.com) on your computer, MemoryOS can use it directly. Press **Use my local Ollama server**, confirm the address (defaults to `http://localhost:11434`) and the model name (defaults to `llama3.2`), and press **Test & connect** — MemoryOS checks the server and lists the models you've pulled. This is the best of both worlds: a capable model (much sharper than the in-browser one) that still runs entirely on your own hardware, with your memories never leaving your network. First-time setup, in a terminal: install Ollama, run `ollama pull llama3.2`, and `ollama serve`. One caveat — if you've *installed* MemoryOS as an app (so it runs from a web address rather than localhost), your browser may block it from reaching Ollama for security; start Ollama with the environment variable `OLLAMA_ORIGINS=*` (or set it to your MemoryOS address) and restart it. Running MemoryOS from `localhost` needs no such step.
+
+You can switch anytime. With a local model (Ollama or offline) the header shows **AI settings**; with a cloud key it shows **Disconnect**. Either one returns you to the choice screen, where all three options live.
 
 ### How it finds the right memories
 
@@ -343,6 +345,8 @@ When an update is published, you'll receive it automatically the next time you o
 **The AI Assistant won't load the offline model.** The offline model needs a browser with WebGPU — an up-to-date Chrome or Edge — and downloads about 900 MB the first time, so that first load needs internet and a little patience. On an unsupported browser, open **AI settings** and connect an Anthropic API key instead.
 
 **The offline assistant answered a few times, then started failing.** The small offline model runs on your device's GPU and can occasionally lose that connection — usually under low memory, sometimes after a very large question. MemoryOS now tries to restart the model automatically; if a message still fails, reload the page to bring it back, ask about a narrower date range, or switch to an API key in **AI settings**. (Also note: the offline model is small and sometimes describes itself loosely or gives a vaguer answer than the cloud option — that's expected, not a data problem.)
+
+**The assistant can't reach my Ollama server.** First, confirm it's running — `ollama serve` — and that the address in **AI settings** matches (default `http://localhost:11434`). If you get "model not found", pull it first: `ollama pull llama3.2` (or whatever model name you set). If MemoryOS is installed as an app and still can't connect, the browser is likely blocking the request as cross-origin — restart Ollama with `OLLAMA_ORIGINS=*` set so it accepts the call.
 
 **I forgot my password and my recovery code.** There is deliberately no bypass — that's what makes it a real lock. If you have a backup file, install MemoryOS fresh on another device or browser, restore the backup there, and leave the lock off.
 

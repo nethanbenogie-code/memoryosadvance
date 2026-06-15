@@ -336,6 +336,12 @@ test("AI: getHistory starts empty and clearHistory resets it", () => {
   clearHistory();
   assert(getHistory().length === 0);
 });
+test("AI: Ollama provider API is exposed", async () => {
+  const ai = await import("../js/ai/ai-service.js");
+  assert(typeof ai.getOllamaConfig === "function", "getOllamaConfig exported");
+  assert(typeof ai.setOllamaConfig === "function", "setOllamaConfig exported");
+  assert(typeof ai.checkOllama === "function", "checkOllama exported");
+});
 test("Semantic service exposes its API and imports cleanly", async () => {
   const sem = await import("../js/services/semantic-service.js");
   assert(sem.EMBED_MODEL === "Xenova/all-MiniLM-L6-v2");

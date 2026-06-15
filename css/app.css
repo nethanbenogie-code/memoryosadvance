@@ -1383,3 +1383,9 @@ button.chip:hover { border-color: var(--ink-soft); }
   .md-foot { flex-direction: column-reverse; align-items: stretch; }
   .md-foot-right { flex-direction: column-reverse; }
 }
+
+/* ------------------- AI provider options (setup) ------------------- */
+.ai-alt-options { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.ai-ollama-panel { display: flex; flex-direction: column; gap: 6px; padding: 12px; margin: 4px 0 8px; background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); }
+.ai-ollama-panel[hidden] { display: none; }
+.ai-ollama-panel code, .ai-privacy code { background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 0 4px; font-size: 12px; }
